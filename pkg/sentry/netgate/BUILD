@@ -36,6 +36,7 @@ go_test(
     srcs = [
     	"netgate_test.go",
     	"proxy_protocol_test.go",
+        "config_test.go",
     ],
     library = ":netgate",
     deps = [

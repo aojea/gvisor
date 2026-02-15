@@ -30,7 +30,7 @@ import (
 	testpb "gvisor.dev/gvisor/test/kubernetes/test_range_config_go_proto"
 	appsv1 "k8s.io/api/apps/v1"
 	v13 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -267,14 +267,14 @@ func (t *TestCluster) OverrideTestNodepoolRuntime(testRuntime RuntimeType) {
 // createNamespace creates a namespace.
 func (t *TestCluster) createNamespace(ctx context.Context, namespace *v13.Namespace) (*v13.Namespace, error) {
 	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.Namespace, error) {
-		return client.CoreV1().Namespaces().Create(ctx, namespace, v1.CreateOptions{})
+		return client.CoreV1().Namespaces().Create(ctx, namespace, metav1.CreateOptions{})
 	})
 }
 
 // getNamespace returns the given namespace in the cluster if it exists.
 func (t *TestCluster) getNamespace(ctx context.Context, namespaceName string) (*v13.Namespace, error) {
 	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.Namespace, error) {
-		return client.CoreV1().Namespaces().Get(ctx, namespaceName, v1.GetOptions{})
+		return client.CoreV1().Namespaces().Get(ctx, namespaceName, metav1.GetOptions{})
 	})
 }
 
@@ -282,7 +282,7 @@ func (t *TestCluster) getNamespace(ctx context.Context, namespaceName string) (*
 func (t *TestCluster) deleteNamespace(ctx context.Context, namespaceName string) error {
 	err := t.client.Do(ctx, func(ctx context.Context, client kubernetes.Interface) error {
 		var zero int64
-		return client.CoreV1().Namespaces().Delete(ctx, namespaceName, v1.DeleteOptions{
+		return client.CoreV1().Namespaces().Delete(ctx, namespaceName, metav1.DeleteOptions{
 			GracePeriodSeconds: &zero,
 		})
 	})
@@ -325,7 +325,7 @@ func (t *TestCluster) getNodePool(ctx context.Context, nodepoolType NodePoolType
 	defer t.nodepoolsMu.Unlock()
 	if t.nodepools == nil {
 		nodes, err := request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.NodeList, error) {
-			return client.CoreV1().Nodes().List(ctx, v1.ListOptions{})
+			return client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		})
 		if err != nil {
 			return nil, fmt.Errorf("cannot list nodes: %w", err)
@@ -416,21 +416,21 @@ func (t *TestCluster) CreatePod(ctx context.Context, pod *v13.Pod) (*v13.Pod, er
 		pod.SetNamespace(NamespaceDefault)
 	}
 	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.Pod, error) {
-		return client.CoreV1().Pods(pod.GetNamespace()).Create(ctx, pod, v1.CreateOptions{})
+		return client.CoreV1().Pods(pod.GetNamespace()).Create(ctx, pod, metav1.CreateOptions{})
 	})
 }
 
 // GetPod is a helper method to Get a pod's metadata.
 func (t *TestCluster) GetPod(ctx context.Context, pod *v13.Pod) (*v13.Pod, error) {
 	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.Pod, error) {
-		return client.CoreV1().Pods(pod.GetNamespace()).Get(ctx, pod.GetName(), v1.GetOptions{})
+		return client.CoreV1().Pods(pod.GetNamespace()).Get(ctx, pod.GetName(), metav1.GetOptions{})
 	})
 }
 
 // ListPods is a helper method to List pods in a cluster.
 func (t *TestCluster) ListPods(ctx context.Context, namespace string) (*v13.PodList, error) {
 	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.PodList, error) {
-		return client.CoreV1().Pods(namespace).List(ctx, v1.ListOptions{})
+		return client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	})
 }
 
@@ -438,7 +438,7 @@ func (t *TestCluster) ListPods(ctx context.Context, namespace string) (*v13.PodL
 func (t *TestCluster) DeletePod(ctx context.Context, pod *v13.Pod) error {
 	err := t.client.Do(ctx, func(ctx context.Context, client kubernetes.Interface) error {
 		var zero int64
-		return client.CoreV1().Pods(pod.GetNamespace()).Delete(ctx, pod.GetName(), v1.DeleteOptions{
+		return client.CoreV1().Pods(pod.GetNamespace()).Delete(ctx, pod.GetName(), metav1.DeleteOptions{
 			GracePeriodSeconds: &zero,
 		})
 	})
@@ -713,28 +713,28 @@ func (t *TestCluster) ContainerDurationSecondsByName(ctx context.Context, pod *v
 // CreateService is a helper method to create a service in a cluster.
 func (t *TestCluster) CreateService(ctx context.Context, service *v13.Service) (*v13.Service, error) {
 	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.Service, error) {
-		return client.CoreV1().Services(service.GetNamespace()).Create(ctx, service, v1.CreateOptions{})
+		return client.CoreV1().Services(service.GetNamespace()).Create(ctx, service, metav1.CreateOptions{})
 	})
 }
 
 // GetService is a helper method to get a service in a cluster.
 func (t *TestCluster) GetService(ctx context.Context, service *v13.Service) (*v13.Service, error) {
 	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.Service, error) {
-		return client.CoreV1().Services(service.GetNamespace()).Get(ctx, service.GetName(), v1.GetOptions{})
+		return client.CoreV1().Services(service.GetNamespace()).Get(ctx, service.GetName(), metav1.GetOptions{})
 	})
 }
 
 // ListServices is a helper method to List services in a cluster.
 func (t *TestCluster) ListServices(ctx context.Context, namespace string) (*v13.ServiceList, error) {
 	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.ServiceList, error) {
-		return client.CoreV1().Services(namespace).List(ctx, v1.ListOptions{})
+		return client.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{})
 	})
 }
 
 // DeleteService is a helper to delete a given service.
 func (t *TestCluster) DeleteService(ctx context.Context, service *v13.Service) error {
 	err := t.client.Do(ctx, func(ctx context.Context, client kubernetes.Interface) error {
-		return client.CoreV1().Services(service.GetNamespace()).Delete(ctx, service.GetName(), v1.DeleteOptions{})
+		return client.CoreV1().Services(service.GetNamespace()).Delete(ctx, service.GetName(), metav1.DeleteOptions{})
 	})
 	if err != nil {
 		return err
@@ -787,14 +787,62 @@ func (t *TestCluster) CreatePersistentVolume(ctx context.Context, volume *v13.Pe
 		volume.SetNamespace(NamespaceDefault)
 	}
 	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.PersistentVolumeClaim, error) {
-		return client.CoreV1().PersistentVolumeClaims(volume.GetNamespace()).Create(ctx, volume, v1.CreateOptions{})
+		return client.CoreV1().PersistentVolumeClaims(volume.GetNamespace()).Create(ctx, volume, metav1.CreateOptions{})
 	})
 }
 
 // DeletePersistentVolume deletes a persistent volume.
 func (t *TestCluster) DeletePersistentVolume(ctx context.Context, volume *v13.PersistentVolumeClaim) error {
 	return t.client.Do(ctx, func(ctx context.Context, client kubernetes.Interface) error {
-		return client.CoreV1().PersistentVolumeClaims(volume.GetNamespace()).Delete(ctx, volume.GetName(), v1.DeleteOptions{})
+		return client.CoreV1().PersistentVolumeClaims(volume.GetNamespace()).Delete(ctx, volume.GetName(), metav1.DeleteOptions{})
+	})
+}
+
+// CreateConfigMap creates a config map.
+func (t *TestCluster) CreateConfigMap(ctx context.Context, cm *v13.ConfigMap) (*v13.ConfigMap, error) {
+	if cm.GetObjectMeta().GetNamespace() == "" {
+		cm.SetNamespace(NamespaceDefault)
+	}
+	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.ConfigMap, error) {
+		return client.CoreV1().ConfigMaps(cm.GetNamespace()).Create(ctx, cm, metav1.CreateOptions{})
+	})
+}
+
+// GetConfigMap gets a config map.
+func (t *TestCluster) GetConfigMap(ctx context.Context, cm *v13.ConfigMap) (*v13.ConfigMap, error) {
+	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*v13.ConfigMap, error) {
+		return client.CoreV1().ConfigMaps(cm.GetNamespace()).Get(ctx, cm.GetName(), metav1.GetOptions{})
+	})
+}
+
+// DeleteConfigMap deletes a config map.
+func (t *TestCluster) DeleteConfigMap(ctx context.Context, cm *v13.ConfigMap) error {
+	return t.client.Do(ctx, func(ctx context.Context, client kubernetes.Interface) error {
+		return client.CoreV1().ConfigMaps(cm.GetNamespace()).Delete(ctx, cm.GetName(), metav1.DeleteOptions{})
+	})
+}
+
+// CreateDaemonSet creates a daemon set.
+func (t *TestCluster) CreateDaemonSet(ctx context.Context, ds *appsv1.DaemonSet) (*appsv1.DaemonSet, error) {
+	if ds.GetObjectMeta().GetNamespace() == "" {
+		ds.SetNamespace(NamespaceDefault)
+	}
+	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*appsv1.DaemonSet, error) {
+		return client.AppsV1().DaemonSets(ds.GetNamespace()).Create(ctx, ds, metav1.CreateOptions{})
+	})
+}
+
+// GetDaemonSet gets a daemon set.
+func (t *TestCluster) GetDaemonSet(ctx context.Context, ds *appsv1.DaemonSet) (*appsv1.DaemonSet, error) {
+	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*appsv1.DaemonSet, error) {
+		return client.AppsV1().DaemonSets(ds.GetNamespace()).Get(ctx, ds.GetName(), metav1.GetOptions{})
+	})
+}
+
+// DeleteDaemonSet deletes a daemon set.
+func (t *TestCluster) DeleteDaemonSet(ctx context.Context, ds *appsv1.DaemonSet) error {
+	return t.client.Do(ctx, func(ctx context.Context, client kubernetes.Interface) error {
+		return client.AppsV1().DaemonSets(ds.GetNamespace()).Delete(ctx, ds.GetName(), metav1.DeleteOptions{})
 	})
 }
 
@@ -804,27 +852,27 @@ func (t *TestCluster) CreateDaemonset(ctx context.Context, ds *appsv1.DaemonSet)
 		ds.SetNamespace(NamespaceDefault)
 	}
 	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*appsv1.DaemonSet, error) {
-		return client.AppsV1().DaemonSets(ds.GetNamespace()).Create(ctx, ds, v1.CreateOptions{})
+		return client.AppsV1().DaemonSets(ds.GetNamespace()).Create(ctx, ds, metav1.CreateOptions{})
 	})
 }
 
 // GetDaemonset gets a daemonset.
 func (t *TestCluster) GetDaemonset(ctx context.Context, ds *appsv1.DaemonSet) (*appsv1.DaemonSet, error) {
 	return request(ctx, t.client, func(ctx context.Context, client kubernetes.Interface) (*appsv1.DaemonSet, error) {
-		return client.AppsV1().DaemonSets(ds.GetNamespace()).Get(ctx, ds.GetName(), v1.GetOptions{})
+		return client.AppsV1().DaemonSets(ds.GetNamespace()).Get(ctx, ds.GetName(), metav1.GetOptions{})
 	})
 }
 
 // DeleteDaemonset deletes a daemonset from this cluster.
 func (t *TestCluster) DeleteDaemonset(ctx context.Context, ds *appsv1.DaemonSet) error {
 	return t.client.Do(ctx, func(ctx context.Context, client kubernetes.Interface) error {
-		return client.AppsV1().DaemonSets(ds.GetNamespace()).Delete(ctx, ds.GetName(), v1.DeleteOptions{})
+		return client.AppsV1().DaemonSets(ds.GetNamespace()).Delete(ctx, ds.GetName(), metav1.DeleteOptions{})
 	})
 }
 
 // GetPodsInDaemonSet returns the list of pods of the given DaemonSet.
 func (t *TestCluster) GetPodsInDaemonSet(ctx context.Context, ds *appsv1.DaemonSet) ([]v13.Pod, error) {
-	listOptions := v1.ListOptions{}
+	listOptions := metav1.ListOptions{}
 	if appLabel, found := ds.Spec.Template.Labels[k8sApp]; found {
 		listOptions.LabelSelector = fmt.Sprintf("%s=%s", k8sApp, appLabel)
 	}

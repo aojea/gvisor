@@ -49,12 +49,7 @@ func TestRegisterSinkFactory(t *testing.T) {
 	if !ok {
 		t.Error("Sink not registered")
 	}
-	if sink.Name() != "test_sink_instance" { // Wait, MockSink returns "test_instance" as Name?
-		// My MockSink impl returns m.name, initialized to "test_instance".
-		// But in SetConfig, we use sinks[sink.Name()] = sink.
-		// So the key in map is "test_instance".
-		// The Config has Name: "test_sink_instance".
-		// Usually the Sink should probably adopt the name from config?
-		// Let's check NewSink wrapper/logic or if the factory is responsible.
+	if sink.Name() != "test_sink_instance" {
+		t.Errorf("Sink name mismatch: got %q, want %q", sink.Name(), "test_sink_instance")
 	}
 }

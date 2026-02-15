@@ -43,6 +43,9 @@ cat <<EOF | docker exec -i "${NODE}" tee /etc/containerd/runsc.toml
 [runsc_config]
   debug = "true"
   debug-log = "/var/log/runsc/%ID%/gvisor.%COMMAND%.log"
+  args = [
+    "--pod-init-config=/var/lib/gvisor/netgate_config.json",
+  ]
 EOF
 
 # Restart containerd to pick up changes

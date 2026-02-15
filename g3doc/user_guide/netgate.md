@@ -6,7 +6,7 @@
 
 NetGate is a gVisor feature designed to enable Zero Trust networking architectures by transparently intercepting and ensuring traffic from sandboxed applications flows through a trusted control point.
 
-Unlike tradition network interception which often relies on `iptables` or specialized CNI plugins, NetGate operates directly within the gVisor kernel (`netstack`). This allows for:
+Unlike tradition network interception which often relies on `iptables` or specialized network plugins, NetGate operates directly within the gVisor kernel (`netstack`). This allows for:
 
 *   **Transparent Interception**: Applications are unaware they are being intercepted.
 *   **Identity-Aware Routing**: Decisions can be based on sandboxed identity (e.g., UID/GID) not just network 5-tuple.

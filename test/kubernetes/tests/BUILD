@@ -79,3 +79,21 @@ go_test(
     ],
     deps = ["//test/kubernetes/k8sctx/kubectlctx"],
 )
+
+go_test(
+    name = "netgate_test",
+    srcs = ["netgate_test.go"],
+    tags = [
+        "local",
+        "noguitar",
+        "notap",
+    ],
+    deps = [
+        "//test/kubernetes/k8sctx/kubectlctx",
+        "//test/kubernetes/testcluster",
+        "@io_k8s_api//apps/v1:go_default_library",
+        "@io_k8s_api//core/v1:go_default_library",
+        "@io_k8s_apimachinery//pkg/apis/meta/v1:go_default_library",
+        "@io_k8s_apimachinery//pkg/util/intstr:go_default_library",
+    ],
+)
