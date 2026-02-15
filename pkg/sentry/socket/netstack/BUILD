@@ -52,6 +52,7 @@ go_library(
         "//pkg/sentry/kernel/auth",
         "//pkg/sentry/ktime",
         "//pkg/sentry/memmap",
+        "//pkg/sentry/netgate",
         "//pkg/sentry/socket",
         "//pkg/sentry/socket/netfilter",
         "//pkg/sentry/socket/netlink/nlmsg",

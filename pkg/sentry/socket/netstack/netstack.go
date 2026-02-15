@@ -52,6 +52,7 @@ import (
 	"gvisor.dev/gvisor/pkg/sentry/kernel"
 	"gvisor.dev/gvisor/pkg/sentry/ktime"
 	"gvisor.dev/gvisor/pkg/sentry/memmap"
+	"gvisor.dev/gvisor/pkg/sentry/netgate"
 	"gvisor.dev/gvisor/pkg/sentry/socket"
 	"gvisor.dev/gvisor/pkg/sentry/socket/netfilter"
 	epb "gvisor.dev/gvisor/pkg/sentry/socket/netstack/events_go_proto"
@@ -795,6 +796,15 @@ func (s *sock) Connect(t *kernel.Task, sockaddr []byte, blocking bool) *syserr.E
 		return syserr.ErrInvalidArgument
 	}
 	addr = s.mapFamily(addr, family)
+
+	// NetGate: Intercept connection if configured.
+	if replacement, err := netgate.CheckConnect(t, addr, s.Endpoint); err != nil {
+		return syserr.FromError(err)
+	} else if replacement != nil {
+		s.Endpoint.Close()
+		s.Endpoint = replacement
+		return nil
+	}
 
 	// Always return right away in the non-blocking case.
 	if !blocking {

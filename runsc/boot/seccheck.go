@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"gvisor.dev/gvisor/pkg/fd"
+	"gvisor.dev/gvisor/pkg/sentry/netgate"
 	"gvisor.dev/gvisor/pkg/sentry/seccheck"
 
 	// Register supported of sinks.
@@ -31,6 +32,7 @@ import (
 // now, it supports setting up a seccheck session.
 type InitConfig struct {
 	TraceSession seccheck.SessionConfig `json:"trace_session"`
+	NetworkGate  netgate.Config         `json:"network_gate"`
 }
 
 func setupSeccheck(configFD int, sinkFDs []int) error {
@@ -41,6 +43,17 @@ func setupSeccheck(configFD int, sinkFDs []int) error {
 	if err != nil {
 		return err
 	}
+
+	// Setup NetGate if configured.
+	if initConf.NetworkGate.Policy != "" {
+		// Validate config if needed, or done in LoadConfig equivalent.
+		// For now, we trust the struct unmarshalling.
+		if err := initConf.NetworkGate.Valid(); err != nil {
+			return err
+		}
+		netgate.SetConfig(&initConf.NetworkGate)
+	}
+
 	return initConf.create(sinkFDs)
 }
 
