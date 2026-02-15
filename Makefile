@@ -65,6 +65,10 @@ test: ## Tests the given $(TARGETS) with the given $(OPTIONS). E.g. make test TA
 	@$(call test,$(OPTIONS) -- $(TARGETS))
 .PHONY: test
 
+test-kubernetes-e2e: ## Runs the Kubernetes end-to-end tests.
+	@test/kubernetes/scripts/run_e2e.sh $(ARGS)
+.PHONY: test-kubernetes-e2e
+
 copy: ## Copies the given $(TARGETS) to the given $(DESTINATION). E.g. make copy TARGETS=runsc DESTINATION=/tmp
 	@$(call copy,$(TARGETS),$(DESTINATION))
 .PHONY: copy
