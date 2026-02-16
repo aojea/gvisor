@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -34,11 +35,13 @@ import (
 	"gvisor.dev/gvisor/pkg/cpuid"
 	"gvisor.dev/gvisor/pkg/fd"
 	"gvisor.dev/gvisor/pkg/log"
+	"gvisor.dev/gvisor/pkg/memutil"
 	"gvisor.dev/gvisor/pkg/metric"
 	"gvisor.dev/gvisor/pkg/prometheus"
 	"gvisor.dev/gvisor/pkg/ring0"
 	"gvisor.dev/gvisor/pkg/sentry/devices/nvproxy/nvconf"
 	"gvisor.dev/gvisor/pkg/sentry/hostmm"
+	"gvisor.dev/gvisor/pkg/sentry/netgate"
 	"gvisor.dev/gvisor/pkg/sentry/platform"
 	"gvisor.dev/gvisor/pkg/sentry/syscalls/linux"
 	"gvisor.dev/gvisor/pkg/tcpip/nftables"
@@ -150,6 +153,8 @@ type Boot struct {
 	podInitConfigFD int
 
 	sinkFDs intFlags
+	// netGateFD is the file descriptor used to connect to the NetGate-configured sink.
+	netGateFD int
 
 	saveFDs intFlags
 
@@ -253,7 +258,9 @@ func (b *Boot) SetFlags(f *flag.FlagSet) {
 	f.IntVar(&b.startSyncFD, "start-sync-fd", -1, "required FD to used to synchronize sandbox startup")
 	f.IntVar(&b.mountsFD, "mounts-fd", -1, "mountsFD is an optional file descriptor to read list of mounts after they have been resolved (direct paths, no symlinks).")
 	f.IntVar(&b.podInitConfigFD, "pod-init-config-fd", -1, "file descriptor to the pod init configuration file.")
+	f.StringVar(&b.podInitConfigFile, "pod-init-config-file", "", "path to the pod init configuration file.")
 	f.Var(&b.sinkFDs, "sink-fds", "ordered list of file descriptors to be used by the sinks defined in --pod-init-config.")
+	f.IntVar(&b.netGateFD, "netgate-fd", -1, "file descriptor to be used by netgate sink configured from the --pod-init-config file.")
 	f.Var(&b.saveFDs, "save-fds", "ordered list of file descriptors to be used save checkpoints. Order: kernel state, page metadata, page file")
 	f.IntVar(&b.rootfsUpperTarFD, "rootfs-upper-tar-fd", -1, "file descriptor to the tar file containing the rootfs upper layer changes.")
 
@@ -292,7 +299,113 @@ func (b *Boot) Execute(_ context.Context, f *flag.FlagSet, args ...any) subcomma
 
 	argOverride := make(map[string]string)
 
-	// Do these before chroot takes effect, otherwise we can't read /proc and /sys.
+	// Get the spec from the specFD. We *must* keep this os.File alive past
+	// the call setCapsAndCallSelf, otherwise the FD will be closed and the
+	// child process cannot read it.
+	specFile := os.NewFile(uintptr(b.specFD), "spec file")
+	spec, err := specutils.ReadSpecFromFile(b.bundleDir, specFile, conf)
+	if err != nil {
+		util.Fatalf("reading spec: %v", err)
+	}
+
+	// Handle NetGate configuration.
+	// We prioritize the flag if set, otherwise check the annotation.
+	// The flag corresponds to the file path on the host.
+	if b.podInitConfigFile == "" && spec.Annotations != nil {
+		if configJSON, ok := spec.Annotations["gvisor.dev/netgate-config"]; ok {
+
+			// We effectively use this memfd as the config file.
+			// However, processNetGateConfig expects to read the config *from a file*.
+			// Wait, I haven't implemented reading from file inside processNetGateConfig?
+			// processNetGateConfig takes *netgate.Config.
+			// So I need to unmarshal here.
+
+			var ngConf netgate.Config
+			if err := json.Unmarshal([]byte(configJSON), &ngConf); err != nil {
+				util.Fatalf("parsing netgate config from annotation: %v", err)
+			}
+
+			// Now process it.
+			// Note: We use os.Open to open the usage path?
+			// processNetGateConfig rewrites the paths.
+			// It needs 'conf *netgate.Config'.
+			sinkFD, err := processNetGateConfig(&ngConf, func(path string) (int, error) {
+				return os.Open(path)
+			}, func(fd int) error {
+				_, _, errno := unix.RawSyscall(unix.SYS_FCNTL, uintptr(fd), unix.F_SETFD, 0)
+				if errno != 0 {
+					return errno
+				}
+				return nil
+			})
+			if err != nil {
+				util.Fatalf("processing netgate config: %v", err)
+			}
+			b.netGateFD = sinkFD
+
+			// We also need to pass the *modified* config to the child (as a file).
+			// processNetGateConfig modified 'ngConf' in place (rewrote paths).
+			// We need to write this modified config to a memfd and pass it.
+			// b.podInitConfigFD needs to be set.
+			modifiedJSON, err := json.Marshal(&ngConf)
+			if err != nil {
+				util.Fatalf("marshaling modified netgate config: %v", err)
+			}
+			mfd, err := memutil.CreateMemFD("netgate-config-processed", modifiedJSON)
+			if err != nil {
+				util.Fatalf("creating memfd for modified netgate config: %v", err)
+			}
+			// MFD is O_CLOEXEC by default? memutil uses O_CLOEXEC?
+			// Yes, usually. But we want to pass it.
+			// We need to clear CLOEXEC.
+			_, _, errno := unix.RawSyscall(unix.SYS_FCNTL, uintptr(mfd), unix.F_SETFD, 0)
+			if errno != 0 {
+				util.Fatalf("clearing cloexec on netgate config memfd: %v", errno)
+			}
+			b.podInitConfigFD = mfd
+		}
+	} else if b.podInitConfigFile != "" {
+		f, err := os.Open(b.podInitConfigFile)
+		if err != nil {
+			util.Fatalf("opening pod init config file %q: %v", b.podInitConfigFile, err)
+		}
+		defer f.Close()
+
+		var ngConf netgate.Config
+		if err := json.NewDecoder(f).Decode(&ngConf); err != nil {
+			util.Fatalf("decoding netgate config: %v", err)
+		}
+
+		sinkFD, err := processNetGateConfig(&ngConf, func(path string) (int, error) {
+			return os.Open(path) // This open happens on Host (or boot context)
+		}, func(fd int) error {
+			_, _, errno := unix.RawSyscall(unix.SYS_FCNTL, uintptr(fd), unix.F_SETFD, 0)
+			if errno != 0 {
+				return errno
+			}
+			return nil
+		})
+		if err != nil {
+			util.Fatalf("processing netgate config: %v", err)
+		}
+		b.netGateFD = sinkFD
+		// Marshal modified config and create memfd
+		modifiedJSON, err := json.Marshal(&ngConf)
+		if err != nil {
+			util.Fatalf("marshaling modified netgate config: %v", err)
+		}
+		mfd, err := memutil.CreateMemFD("netgate-config-processed", modifiedJSON)
+		if err != nil {
+			util.Fatalf("creating memfd for modified netgate config: %v", err)
+		}
+		_, _, errno := unix.RawSyscall(unix.SYS_FCNTL, uintptr(mfd), unix.F_SETFD, 0)
+		if errno != 0 {
+			util.Fatalf("clearing cloexec on netgate config memfd: %v", errno)
+		}
+		b.podInitConfigFD = mfd
+	}
+
+	// Do these before chroot takes effect, otherwise we can't read /proc and /sys
 	if len(b.productName) == 0 {
 		if product, err := os.ReadFile("/sys/devices/virtual/dmi/id/product_name"); err != nil {
 			log.Warningf("Not setting product_name: %v", err)
@@ -572,6 +685,7 @@ func (b *Boot) Execute(_ context.Context, f *flag.FlagSet, args ...any) subcomma
 		ProductName:         b.productName,
 		PodInitConfigFD:     b.podInitConfigFD,
 		SinkFDs:             b.sinkFDs.GetArray(),
+		NetGateFD:           b.netGateFD,
 		ProfileOpts:         profile.MakeOpts(&b.profileFDs, conf.ProfileGCInterval),
 		NvidiaDriverVersion: nvidiaDriverVersion,
 		NvidiaHostSettings: &nvconf.HostSettings{
@@ -803,4 +917,29 @@ func exportFinalMetrics(f *os.File) error {
 		return fmt.Errorf("closing metrics snapshot file: %w", err)
 	}
 	return nil
+}
+
+// processNetGateConfig accesses the NetGate configuration and rewrites it to use file descriptors.
+func processNetGateConfig(conf *netgate.Config, open func(string) (int, error), clearCloexec func(int) error) (int, error) {
+	sink := &conf.Sink
+	if sink.Type == "remote_uds" {
+		fd, err := open(sink.Path)
+		if err != nil {
+			if sink.IgnoreSetupError {
+				log.Warningf("Failed to open NetGate sink %q: %v", sink.Path, err)
+				conf.Sink = netgate.SinkConfig{}
+				return -1, nil
+			}
+			return -1, fmt.Errorf("opening NetGate sink %q: %w", sink.Path, err)
+		}
+
+		if err := clearCloexec(fd); err != nil {
+			unix.Close(fd)
+			return -1, fmt.Errorf("clearing CLOEXEC: %w", err)
+		}
+
+		sink.Path = fmt.Sprintf("/proc/self/fd/%d", fd)
+		return fd, nil
+	}
+	return -1, nil
 }

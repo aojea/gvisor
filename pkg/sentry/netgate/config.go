@@ -24,9 +24,9 @@ import (
 // Config represents the configuration to apply during pod creation.
 // It mirrors the JSON structure passed via --pod-init-config within the "network_gate" field.
 type Config struct {
-	Policy      string       `json:"policy"`
-	Sinks       []SinkConfig `json:"sinks"`
-	BypassRules []Rule       `json:"bypass_rules"`
+	Policy      string     `json:"policy"`
+	Sink        SinkConfig `json:"sink"`
+	BypassRules []Rule     `json:"bypass_rules"`
 }
 
 // SinkConfig describes a sink configuration.

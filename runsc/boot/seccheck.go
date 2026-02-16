@@ -35,26 +35,30 @@ type InitConfig struct {
 	NetworkGate  netgate.Config         `json:"network_gate"`
 }
 
-func setupSeccheck(configFD int, sinkFDs []int) error {
-	config := fd.New(configFD)
-	defer config.Close()
+func setupSeccheck(configFD int, configFile string, sinkFDs, netGateFDs []int) error {
+	var initConf *InitConfig
+	if configFD >= 0 {
+		// Load the config from the file descriptor.
+		f := os.NewFile(uintptr(configFD), "pod_init_config")
+		defer f.Close()
 
-	initConf, err := loadInitConfig(config)
-	if err != nil {
-		return err
-	}
-
-	// Setup NetGate if configured.
-	if initConf.NetworkGate.Policy != "" {
-		// Validate config if needed, or done in LoadConfig equivalent.
-		// For now, we trust the struct unmarshalling.
-		if err := initConf.NetworkGate.Valid(); err != nil {
+		initConf = &InitConfig{} // Initialize initConf before decoding
+		if err := json.NewDecoder(f).Decode(initConf); err != nil {
 			return err
 		}
-		netgate.SetConfig(&initConf.NetworkGate)
+	} else {
+		var err error
+		initConf, err = LoadInitConfig(configFile)
+		if err != nil {
+			return err
+		}
 	}
 
-	return initConf.create(sinkFDs)
+	if err := initConf.create(sinkFDs); err != nil {
+		return err
+	}
+	netgate.SetConfig(&initConf.NetworkGate)
+	return nil
 }
 
 // LoadInitConfig loads an InitConfig struct from a json formatted file.

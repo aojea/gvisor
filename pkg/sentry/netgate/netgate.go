@@ -45,9 +45,16 @@ type Sink interface {
 var (
 	mu            sync.RWMutex
 	config        *Config
-	sinks         map[string]Sink
+	sink          Sink
 	sinkFactories = make(map[string]SinkFactory)
 )
+
+// Enabled returns true if NetGate is configured.
+func Enabled() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	return config != nil
+}
 
 // SinkFactory creates a new sink.
 type SinkFactory func(config *SinkConfig) (Sink, error)
@@ -74,7 +81,7 @@ func NewSink(c *SinkConfig) (Sink, error) {
 func CheckConnect(t *kernel.Task, addr tcpip.FullAddress, origin tcpip.Endpoint) (tcpip.Endpoint, error) {
 	mu.RLock()
 	c := config
-	s := sinks
+	s := sink
 	mu.RUnlock()
 
 	if c == nil {
@@ -87,18 +94,15 @@ func CheckConnect(t *kernel.Task, addr tcpip.FullAddress, origin tcpip.Endpoint)
 	}
 
 	// For now, if policy is redirect_all, try to use the first sink.
-	if c.Policy == "redirect_all" && len(c.Sinks) > 0 {
-		sinkName := c.Sinks[0].Name
-		if sink, ok := s[sinkName]; ok {
-			var src tcpip.FullAddress
-			// Try to get source address from origin endpoint
-			if origin != nil {
-				if a, err := origin.GetLocalAddress(); err == nil {
-					src = a
-				}
+	if c.Policy == "redirect_all" && s != nil {
+		var src tcpip.FullAddress
+		// Try to get source address from origin endpoint
+		if origin != nil {
+			if a, err := origin.GetLocalAddress(); err == nil {
+				src = a
 			}
-			return sink.Connect(t, src, addr)
 		}
+		return s.Connect(t, src, addr)
 	}
 
 	return nil, nil
@@ -150,33 +154,22 @@ func SetConfig(c *Config) {
 	mu.Lock()
 	defer mu.Unlock()
 	config = c
-	sinks = make(map[string]Sink)
 
-	for _, sc := range c.Sinks {
-		sink, err := NewSink(&sc)
-		if err != nil {
-			if sc.IgnoreSetupError {
-				continue
-			}
-			// checking for error in SetConfig might be too late if we want to fail boot?
-			// But SetConfig signature is void.
-			// for now we just log (if we had a logger) or ignore?
-			// Ideally SetConfig should return error.
-			// But we'll just skip broken sinks for now or maybe panic if critical?
-			// The caller `setupSeccheck` calls `Valid()` before, but `Valid()` doesn't check factory existence (yet).
-			// We should probably log this.
-			continue
+	sink, err := NewSink(&c.Sink)
+	if err != nil {
+		if c.Sink.IgnoreSetupError {
+			return
 		}
-		sinks[sink.Name()] = sink
+		panic(fmt.Errorf("failed to create sink: %v", err))
 	}
+	sink = sink
 }
 
 // RegisterSink registers a sink.
 func RegisterSink(s Sink) {
 	mu.Lock()
 	defer mu.Unlock()
-	if sinks == nil {
-		sinks = make(map[string]Sink)
+	if sink == nil {
+		sink = s
 	}
-	sinks[s.Name()] = s
 }

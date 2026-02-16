@@ -28,11 +28,9 @@ func TestRegisterSinkFactory(t *testing.T) {
 	})
 
 	cfg := &Config{
-		Sinks: []SinkConfig{
-			{
-				Name: "test_sink_instance",
-				Type: "test_sink",
-			},
+		Sink: SinkConfig{
+			Name: "test_sink_instance",
+			Type: "test_sink",
 		},
 	}
 
@@ -42,13 +40,6 @@ func TestRegisterSinkFactory(t *testing.T) {
 		t.Error("Factory not called")
 	}
 
-	mu.RLock()
-	sink, ok := sinks["test_sink_instance"]
-	mu.RUnlock()
-
-	if !ok {
-		t.Error("Sink not registered")
-	}
 	if sink.Name() != "test_sink_instance" {
 		t.Errorf("Sink name mismatch: got %q, want %q", sink.Name(), "test_sink_instance")
 	}

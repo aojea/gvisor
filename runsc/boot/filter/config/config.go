@@ -45,6 +45,7 @@ type Options struct {
 	ControllerFD          uint32
 	CgoEnabled            bool
 	PluginNetwork         bool
+	NetGate               bool
 }
 
 // isInstrumentationEnabled returns whether there are any
@@ -73,6 +74,7 @@ func (opt Options) ConfigKey() string {
 	sb.WriteString(fmt.Sprintf("TPUProxy=%t ", opt.TPUProxy))
 	sb.WriteString(fmt.Sprintf("CgoEnabled=%t ", opt.CgoEnabled))
 	sb.WriteString(fmt.Sprintf("PluginNetwork=%t ", opt.PluginNetwork))
+	sb.WriteString(fmt.Sprintf("NetGate=%t ", opt.NetGate))
 	return strings.TrimSpace(sb.String())
 }
 
@@ -107,6 +109,9 @@ func Warnings(opt Options) []string {
 	}
 	if opt.PluginNetwork {
 		warnings = append(warnings, "plugin network stack enabled: syscall filters less restrictive!")
+	}
+	if opt.NetGate {
+		warnings = append(warnings, "NetGate enabled: syscall filters less restrictive!")
 	}
 	return warnings
 }
@@ -160,6 +165,9 @@ func rules(opt Options, vars precompiledseccomp.Values) (seccomp.SyscallRules, s
 	}
 	if opt.PluginNetwork {
 		s.Merge(plugin.SeccompFilters())
+	}
+	if opt.NetGate {
+		s.Merge(netgateFilters())
 	}
 
 	s.Merge(opt.Platform.SyscallFilters(vars))

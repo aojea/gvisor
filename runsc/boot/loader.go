@@ -51,6 +51,7 @@ import (
 	"gvisor.dev/gvisor/pkg/sentry/kernel"
 	"gvisor.dev/gvisor/pkg/sentry/kernel/auth"
 	"gvisor.dev/gvisor/pkg/sentry/loader"
+	"gvisor.dev/gvisor/pkg/sentry/netgate"
 	"gvisor.dev/gvisor/pkg/sentry/pgalloc"
 	"gvisor.dev/gvisor/pkg/sentry/platform"
 	_ "gvisor.dev/gvisor/pkg/sentry/platform/platforms" // register all platforms.
@@ -403,6 +404,9 @@ type Args struct {
 	// SinkFDs is an ordered array of file descriptors to be used by seccheck
 	// sinks configured from the --pod-init-config file.
 	SinkFDs []int
+	// NetGateFD is an ordered array of file descriptors to be used by netgate
+	// sinks configured from the --pod-init-config file.
+	NetGateFD int
 	// ProfileOpts contains the set of profiles to enable and the
 	// corresponding FDs where profile data will be written.
 	ProfileOpts profile.Opts
@@ -743,8 +747,9 @@ func New(args Args) (*Loader, error) {
 	defer hostFilesystem.DecRef(l.k.SupervisorContext())
 	l.k.SetHostMount(l.k.VFS().NewDisconnectedMount(hostFilesystem, nil, &vfs.MountOptions{}))
 
-	if args.PodInitConfigFD >= 0 {
-		if err := setupSeccheck(args.PodInitConfigFD, args.SinkFDs); err != nil {
+	// Setup seccheck.
+	if args.PodInitConfigFD >= 0 || args.PodInitConfigFile != "" {
+		if err := setupSeccheck(args.PodInitConfigFD, args.PodInitConfigFile, args.SinkFDs, args.NetGateFDs); err != nil {
 			log.Warningf("unable to configure event session: %v", err)
 		}
 	}
@@ -996,6 +1001,7 @@ func (l *Loader) installSeccompFilters() error {
 			ControllerFD:          uint32(l.ctrl.srv.FD()),
 			CgoEnabled:            config.CgoEnabled,
 			PluginNetwork:         l.root.conf.Network == config.NetworkPlugin,
+			NetGate:               netgate.Enabled(),
 		}
 		if err := filter.Install(opts); err != nil {
 			return fmt.Errorf("installing seccomp filters: %w", err)
